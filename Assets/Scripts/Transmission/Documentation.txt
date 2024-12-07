@@ -1,0 +1,39 @@
+
+Unreliable
+
+PACKET_TYPE
+- Connect
+- Disconnect
+- ReplicationData
+- RemoteProcedure
+
+REPLICATION_DATA
+- Create -> networkId, objectId, (additional data)
+- Destroy -> networkId
+- Update -> networkId, full object replication
+- UpdatePartial -> networkId, partial object replication, delta values
+
+REMOTE_PROCEDURE
+- functionId, (arguments)
+
+ID
+32 bits = >4 billion values
+
+DESKTOP INPUT
+bits for keys
+
+MOBILE INPUT
+fixed point joystick
+
+benchmarks
+----------
+simple entropy encoding
+300 entities / 208.8 kbps
+
+simple entropy encoding packed uints
+300 entities / 197.5 kbps
+658 bps/entity
+
+delta compression
+
+frustum culling caches colliders, if they change, this needs to be updated
