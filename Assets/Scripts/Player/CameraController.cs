@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class CameraController : MonoBehaviour
@@ -7,6 +8,11 @@ public class CameraController : MonoBehaviour
     public EInput inputType;
 
     public MenuManager menuManager;
+
+    //parent of transform (to apply planet operations)
+    public Transform cameraElbow;
+
+    public Quaternion frame = Quaternion.identity;
 
     //if there is no specified focus, this one will be applied
     public Transform defaultFocus;
@@ -19,6 +25,7 @@ public class CameraController : MonoBehaviour
     public float pitch = 0.0f;
 
     public float range = 5.0f;
+    public float trueRange = 5.0f;
 
     //allow the editor to change this value within reason
     public float sensitivity = 0.0f;
@@ -33,11 +40,12 @@ public class CameraController : MonoBehaviour
 
     public bool isThirdPerson = false;
     public bool fuzz = false;
+    public bool isRouted = false;
 
     void Start ()
     {
-		
-	}
+        GetComponent<Camera>().depthTextureMode |= DepthTextureMode.Depth;
+    }
 
     public void Poll()
     {
@@ -61,6 +69,20 @@ public class CameraController : MonoBehaviour
                     menuManager.ActivateMenu();
                 }
             }
+        }
+
+        if (isRouted)
+        {
+            if (!isThirdPerson)
+            {
+                TogglePerspective();
+            }
+
+            range = 5.0f;
+        }
+        else
+        {
+            range = trueRange;
         }
 
         if (inputType == EInput.DESKTOP)
@@ -146,12 +168,15 @@ public class CameraController : MonoBehaviour
             pitch = Random.Range(-Mathf.PI * 0.5f + 0.001f, Mathf.PI * 0.5f - 0.001f);
         }
 
-        Vector3 f = MathExtension.DirectionFromYawPitch(yaw, pitch);
-
         if (focus == null)
         {
             focus = defaultFocus;
         }
+
+        cameraElbow.rotation = frame;
+
+        Vector3 lf = MathExtension.DirectionFromYawPitch(yaw, pitch);
+        Vector3 f = cameraElbow.TransformDirection(lf);
 
         RaycastHit collInfo;
 
@@ -160,23 +185,28 @@ public class CameraController : MonoBehaviour
         //readjust the camera position if there is a collider in the way
         if (Physics.SphereCast(focus.position, collisionRadius, (target - focus.position).normalized, out collInfo, range, blockingMask.value))
         {
-            transform.position = collInfo.point + collInfo.normal * collisionRadius;
+            cameraElbow.position = collInfo.point + collInfo.normal * collisionRadius;
         }
         else
         {
-            transform.position = focus.position + f * range;
+            cameraElbow.position = focus.position + f * range;
         }
 
-        transform.rotation = Quaternion.LookRotation(-f);
+        transform.localRotation = Quaternion.LookRotation(-lf);
     }
 
     public void TogglePerspective()
     {
         isThirdPerson = !isThirdPerson;
 
+        if (isRouted)
+        {
+            isThirdPerson = true;
+        }
+
         if (menuManager.client.proxy != null)
         {
-            MeshRenderer[] meshRenderers = menuManager.client.proxy.animator.GetComponentsInChildren<MeshRenderer>();
+            MeshRenderer[] meshRenderers = menuManager.client.proxy.animator.GetComponentsInChildren<MeshRenderer>(true);
 
             foreach (MeshRenderer meshRenderer in meshRenderers)
             {
@@ -198,7 +228,7 @@ public class CameraController : MonoBehaviour
                 menuManager.perspectiveButtonText.text = "First-Person";
             }
 
-            range = 2.0f;
+            trueRange = 2.0f;
         }
         else
         {
@@ -207,7 +237,26 @@ public class CameraController : MonoBehaviour
                 menuManager.perspectiveButtonText.text = "Third-Person";
             }
 
-            range = 0.01f;
+            trueRange = 0.01f;
         }
+    }
+
+    public void CameraCorrection(Quaternion oldFrame, Quaternion newFrame)
+    {
+        Vector3 of = oldFrame * Vector3.forward;
+        Vector3 nf = newFrame * Vector3.forward;
+
+        Vector2 of2 = new Vector2(of.x, of.z);
+        Vector2 nf2 = new Vector2(nf.x, nf.z);
+
+        float yawCorrection = Vector2.SignedAngle(of2.normalized, nf2.normalized) * Mathf.Deg2Rad;
+
+        yaw += yawCorrection;
+    }
+
+    public void SetCamera(float yaw, float pitch)
+    {
+        this.yaw = yaw;
+        this.pitch = pitch;
     }
 }

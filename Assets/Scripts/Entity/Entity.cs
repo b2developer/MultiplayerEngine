@@ -11,7 +11,10 @@ public enum EObject
     CHAMELEON = 3,
     PLAYER = 4,
     PROJECTILE = 5,
-    MAX = 6,
+    SHIP = 6,
+    BIG_SHIP = 7,
+    SMALL_SHIP = 8,
+    MAX = 9,
 }
 
 //double inheritance? ew

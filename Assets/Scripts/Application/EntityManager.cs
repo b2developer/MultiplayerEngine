@@ -26,6 +26,10 @@ public class WriteReplicationIndexer
 
 public class EntityManager : MonoBehaviour
 {
+    public static EntityManager instance = null;
+
+    public int proxyId = -1;
+
     public ObjectRegistry objectRegistry;
     public RPCManager rpcManager;
     public DummyRegistry dummyRegistry;
@@ -43,6 +47,11 @@ public class EntityManager : MonoBehaviour
 
     public void Initialise()
     {
+        if (instance == null)
+        {
+            instance = this;
+        }
+
         cullingStack = new CullingStack();
 
         networkIds = new Bucket(Settings.MAX_ENTITY_INDEX);
@@ -84,11 +93,25 @@ public class EntityManager : MonoBehaviour
             {
                 objectRegistry.destroyPlayerCallback(item);
             }
+            else if (item.type == EObject.SHIP)
+            {
+                objectRegistry.destroyShipCallback(item);
+            }
+            else if (item.type == EObject.BIG_SHIP)
+            {
+                objectRegistry.destroyShipCallback(item);
+            }
+            else if (item.type == EObject.SMALL_SHIP)
+            {
+                objectRegistry.destroyShipCallback(item);
+            }
 
             Destroy(item.gameObject);
         }
 
         entities.Clear();
+
+        proxyId = -1;
     }
 
     public void DestroyClient(uint id)
@@ -108,6 +131,18 @@ public class EntityManager : MonoBehaviour
                 if (item.type == EObject.PLAYER)
                 {
                     objectRegistry.destroyPlayerCallback(item);
+                }
+                else if (item.type == EObject.SHIP)
+                {
+                    objectRegistry.destroyShipCallback(item);
+                }
+                else if (item.type == EObject.BIG_SHIP)
+                {
+                    objectRegistry.destroyShipCallback(item);
+                }
+                else if (item.type == EObject.SMALL_SHIP)
+                {
+                    objectRegistry.destroyShipCallback(item);
                 }
 
                 Destroy(item.gameObject);
@@ -134,6 +169,23 @@ public class EntityManager : MonoBehaviour
                 lookup.Remove((int)item.id);
 
                 updateManager.entityFunction -= item.Tick;
+
+                if (item.type == EObject.PLAYER)
+                {
+                    objectRegistry.destroyPlayerCallback(item);
+                }
+                else if (item.type == EObject.SHIP)
+                {
+                    objectRegistry.destroyShipCallback(item);
+                }
+                else if (item.type == EObject.BIG_SHIP)
+                {
+                    objectRegistry.destroyShipCallback(item);
+                }
+                else if (item.type == EObject.SMALL_SHIP)
+                {
+                    objectRegistry.destroyShipCallback(item);
+                }
 
                 Destroy(item.gameObject);
 

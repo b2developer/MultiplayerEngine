@@ -17,11 +17,15 @@ public class ObjectRegistry : MonoBehaviour
 
     public PlayerFunc spawnPlayerCallback;
     public PlayerFunc destroyPlayerCallback;
+    public PlayerFunc spawnShipCallback;
+    public PlayerFunc destroyShipCallback;
 
-    public void Start()
+    public void Initialise()
     {
         spawnPlayerCallback = DefaultPlayerFuncCallback;
         destroyPlayerCallback = DefaultPlayerFuncCallback;
+        spawnShipCallback = DefaultPlayerFuncCallback;
+        destroyShipCallback = DefaultPlayerFuncCallback;
     }
 
     public void DefaultPlayerFuncCallback(Entity entity)
@@ -36,6 +40,18 @@ public class ObjectRegistry : MonoBehaviour
         if (entity.type == EObject.PLAYER)
         {
             spawnPlayerCallback(entity);
+        }
+        else if (entity.type == EObject.SHIP)
+        {
+            spawnShipCallback(entity);
+        }
+        else if (entity.type == EObject.BIG_SHIP)
+        {
+            spawnShipCallback(entity);
+        }
+        else if (entity.type == EObject.SMALL_SHIP)
+        {
+            spawnShipCallback(entity);
         }
 
         entityManager.lookup.Place(entity, (int)entity.id);
@@ -58,6 +74,9 @@ public class ObjectRegistry : MonoBehaviour
             case EObject.CHAMELEON: return CreateChameleonClient(ref stream);
             case EObject.PLAYER: return CreatePlayerClient(ref stream);
             case EObject.PROJECTILE: return CreateProjectileClient(ref stream);
+            case EObject.SHIP: return CreateShipClient(ref stream, EObject.SHIP);
+            case EObject.BIG_SHIP: return CreateShipClient(ref stream, EObject.BIG_SHIP);
+            case EObject.SMALL_SHIP: return CreateShipClient(ref stream, EObject.SMALL_SHIP);
         }
 
         return null;
@@ -65,6 +84,23 @@ public class ObjectRegistry : MonoBehaviour
 
     public void RegisterObjectServer(Entity entity)
     {
+        if (entity.type == EObject.PLAYER)
+        {
+            spawnPlayerCallback(entity);
+        }
+        else if (entity.type == EObject.SHIP)
+        {
+            spawnShipCallback(entity);
+        }
+        else if (entity.type == EObject.BIG_SHIP)
+        {
+            spawnShipCallback(entity);
+        }
+        else if (entity.type == EObject.SMALL_SHIP)
+        {
+            spawnShipCallback(entity);
+        }
+
         entity.id = entityManager.networkIds.GetFreeIndex();
         entityManager.AssignFullTick(entity);
 
@@ -192,12 +228,6 @@ public class ObjectRegistry : MonoBehaviour
 
         PlayerEntity playerEntity = instance.GetComponent<PlayerEntity>();
 
-        playerEntity.projectileSpawner = new ProjectileSpawner();
-
-        playerEntity.projectileSpawner.entityManager = entityManager;
-        playerEntity.projectileSpawner.objectRegistry = this;
-        playerEntity.projectileSpawner.playerEntity = playerEntity;
-
         if (includeInterpolationFilter)
         {
             playerEntity.interpolationFilter = new InterpolationFilter();
@@ -244,6 +274,33 @@ public class ObjectRegistry : MonoBehaviour
         }
         
         return transformEntity;
+    }
+
+    public Entity CreateShipClient(ref BitStream stream, EObject variant)
+    {
+        GameObject instance = Instantiate<GameObject>(clientPrefabs[(int)variant]);
+
+        ShipClientEntity shipEntity = instance.GetComponent<ShipClientEntity>();
+
+        if (includeInterpolationFilter)
+        {
+            shipEntity.interpolationFilter = new InterpolationFilter();
+        }
+
+        shipEntity.position = new FixedPoint3(Settings.WORLD_MIN_X, Settings.WORLD_MIN_Y, Settings.WORLD_MIN_Z, Settings.WORLD_MAX_X, Settings.WORLD_MAX_Y, Settings.WORLD_MAX_Z, 0.01f);
+        shipEntity.rotation = new CompressedQuaternion();
+
+        shipEntity.ReadFromStream(ref stream);
+
+        instance.transform.SetPositionAndRotation(shipEntity.position.vector, shipEntity.rotation.quaternion);
+
+        if (includeInterpolationFilter)
+        {
+            //finish interpolation for teleportation
+            shipEntity.interpolationFilter.timer = Settings.INTERPOLATION_PERIOD;
+        }
+
+        return shipEntity;
     }
 
     public void CreateCubeServer(Vector3 position, Quaternion rotation)
@@ -333,12 +390,6 @@ public class ObjectRegistry : MonoBehaviour
 
         playerEntity.type = EObject.PLAYER;
 
-        playerEntity.projectileSpawner = new ProjectileSpawner();
-
-        playerEntity.projectileSpawner.entityManager = entityManager;
-        playerEntity.projectileSpawner.objectRegistry = this;
-        playerEntity.projectileSpawner.playerEntity = playerEntity;
-
         playerEntity.position = new FixedPoint3(Settings.WORLD_MIN_X, Settings.WORLD_MIN_Y, Settings.WORLD_MIN_Z, Settings.WORLD_MAX_X, Settings.WORLD_MAX_Y, Settings.WORLD_MAX_Z, 0.01f);
         playerEntity.rotation = new CompressedQuaternion();
 
@@ -350,7 +401,7 @@ public class ObjectRegistry : MonoBehaviour
 
     public void AddPlayerAnimator(PlayerEntity entity)
     {
-        MeshRenderer[] meshRenderers = entity.GetComponentsInChildren<MeshRenderer>();
+        MeshRenderer[] meshRenderers = entity.GetComponentsInChildren<MeshRenderer>(true);
 
         foreach (MeshRenderer meshRenderer in meshRenderers)
         {
@@ -378,8 +429,12 @@ public class ObjectRegistry : MonoBehaviour
 
         //sweap out default cosmetics for player animator cosmetics
         PlayerCosmetics cosmetics = instance.GetComponentInChildren<PlayerCosmetics>();
+
+        cosmetics.SetRace(entity.cosmetics.race);
+
         Destroy(entity.cosmetics);
         entity.cosmetics = cosmetics;
+
     }
 
     public void RemovePlayerAnimator(PlayerEntity entity)
@@ -407,5 +462,24 @@ public class ObjectRegistry : MonoBehaviour
         projectileEntity.rotation.quaternion = rotation;
 
         RegisterObjectServer(projectileEntity);
+    }
+
+    public void CreateShipServer(Vector3 position, Quaternion rotation, Vector3 angularVelocity, EObject variant)
+    {
+        GameObject instance = Instantiate<GameObject>(serverPrefabs[(int)variant]);
+
+        instance.transform.SetPositionAndRotation(position, rotation);
+
+        ShipEntity shipEntity = instance.GetComponent<ShipEntity>();
+
+        shipEntity.type = variant;
+
+        shipEntity.position = new FixedPoint3(Settings.WORLD_MIN_X, Settings.WORLD_MIN_Y, Settings.WORLD_MIN_Z, Settings.WORLD_MAX_X, Settings.WORLD_MAX_Y, Settings.WORLD_MAX_Z, 0.01f);
+        shipEntity.rotation = new CompressedQuaternion();
+
+        shipEntity.position.vector = position;
+        shipEntity.rotation.quaternion = rotation;
+
+        RegisterObjectServer(shipEntity);
     }
 }

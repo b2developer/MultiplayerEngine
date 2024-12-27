@@ -33,6 +33,12 @@ public class TransformEntity : Entity
     {
         base.Initialise();
         dirtyFlagLength += 7;
+
+        if (colliderCache == null)
+        {
+            colliderCache = new ColliderCache();
+            colliderCache.Generate(gameObject);
+        }
     }
 
     public override void SetActive(bool state)
@@ -62,7 +68,7 @@ public class TransformEntity : Entity
     {
         if (interpolationFilter != null)
         {
-            interpolationFilter.SetPreviousState(transform.position, transform.rotation);
+            interpolationFilter.SetPreviousState(transform.localPosition, transform.localRotation);
         }
 
         base.ReadFromStream(ref stream);
@@ -92,6 +98,11 @@ public class TransformEntity : Entity
         {
             interpolationFilter.SetCurrentState(position.vector, rotation.quaternion);
         }
+        else
+        {
+            transform.localPosition = position.vector;
+            transform.localRotation = rotation.quaternion;
+        }    
     }
 
     public override int GetBitLength()
@@ -154,7 +165,7 @@ public class TransformEntity : Entity
     {
         if (interpolationFilter != null)
         {
-            interpolationFilter.SetPreviousState(transform.position, transform.rotation);
+            interpolationFilter.SetPreviousState(transform.localPosition, transform.localRotation);
         }
 
         base.ReadFromStreamPartial(ref stream);
@@ -247,6 +258,11 @@ public class TransformEntity : Entity
         {
             interpolationFilter.SetCurrentState(position.vector, rotation.quaternion);
         }
+        else
+        {
+            transform.localPosition = position.vector;
+            transform.localRotation = rotation.quaternion;
+        }
     }
 
     public override int GetBitLengthPartial()
@@ -295,8 +311,8 @@ public class TransformEntity : Entity
     {
         if (interpolationFilter == null)
         {
-            position.vector = transform.position;
-            rotation.quaternion = transform.rotation;
+            position.vector = transform.localPosition;
+            rotation.quaternion = transform.localRotation;
 
             if (position.vector.x != previousPosition.x)
             {

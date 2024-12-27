@@ -54,14 +54,17 @@ public class ClientSidePrediction : MonoBehaviour
         //re apply unacknowledged inputs
         count = unacknowledgedInputs.Count;
 
-        for (int i = 0; i < count; i++)
+        if (!proxy.isRouted)
         {
-            proxy.input = unacknowledgedInputs[i];
+            for (int i = 0; i < count; i++)
+            {
+                proxy.input = unacknowledgedInputs[i];
 
-            proxy.ManualTick();
+                proxy.ManualTick();
 
-            Physics.Simulate(Time.fixedDeltaTime);
-            Physics.SyncTransforms();
+                Physics.Simulate(Time.fixedDeltaTime);
+                Physics.SyncTransforms();
+            }
         }
     }
 }

@@ -233,7 +233,7 @@ public class Channel
                     //symmetric NAT has assigned a different port, adjust
                     endpoint = new IPEndPoint(sendIp.Address, recievedIp.Port);
 
-                    UnityEngine.Debug.Log("SYMMETRIC NAT DETECTED");
+                    //UnityEngine.Debug.Log("SYMMETRIC NAT DETECTED");
                 }
             }
         }
@@ -331,7 +331,7 @@ public class Channel
                     //check if the mask is valid
                     if (difference > 0 && difference <= Settings.ACK_FIELD_SIZE)
                     {
-			            difference--;
+			            //difference--;
 
                         mask = mask << difference;
 
@@ -343,7 +343,7 @@ public class Channel
                             i--;
                             count--;
 
-                            UnityEngine.Debug.Log("ACK RECIEVED THROUGH MASK");
+                            //UnityEngine.Debug.Log("ACK RECIEVED THROUGH MASK");
                         }
                     }
                     else if (item.sequence == ackIndex)
@@ -353,12 +353,12 @@ public class Channel
                         i--;
                         count--;
 
-                        UnityEngine.Debug.Log("ACK RECIEVED DIRECTLY");
+                        //UnityEngine.Debug.Log("ACK RECIEVED DIRECTLY");
                     }
                     if (difference > Settings.ACK_FIELD_SIZE)
                     {
                         //something has gone horribly wrong, 32 ack bits was not enough to acknowledge the message once :(
-                        UnityEngine.Debug.Log("ACK WAS NOT RECIEVED IN FIELD (older than 32 messages)");
+                        //UnityEngine.Debug.Log("ACK WAS NOT RECIEVED IN FIELD (older than 32 messages)");
                     }
                 }
             }
@@ -388,7 +388,7 @@ public class Channel
             }
             else
             {
-                UnityEngine.Debug.Log("DROPPED OUT OF ORDER PACKET");
+                //UnityEngine.Debug.Log("DROPPED OUT OF ORDER PACKET");
             }
         }
 
@@ -538,7 +538,7 @@ public class Channel
 
                 if (item.time >= Settings.RELIABLE_TIMEOUT)
                 {
-                    UnityEngine.Debug.Log("LOSS DETECTED, RESENDING");
+                    //UnityEngine.Debug.Log("LOSS DETECTED, RESENDING");
 
                     Send(item.buffer, Settings.EMessageType.RAW);
                     item.time -= Settings.RELIABLE_TIMEOUT;

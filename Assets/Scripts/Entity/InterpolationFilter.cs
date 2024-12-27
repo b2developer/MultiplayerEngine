@@ -67,11 +67,23 @@ public class InterpolationFilter
 
         float lerp = timer / Settings.INTERPOLATION_PERIOD;
 
-        transform.position = Vector3.Lerp(previousPosition, currentPosition, lerp);
+        transform.localPosition = Vector3.Lerp(previousPosition, currentPosition, lerp);
 
         if (enableRotation)
         {
-            transform.rotation = Quaternion.Lerp(previousRotation, currentRotation, lerp);
+            transform.localRotation = Quaternion.Lerp(previousRotation, currentRotation, lerp);
+        }
+    }
+
+    public void Apply(Transform transform)
+    {
+        float lerp = timer / Settings.INTERPOLATION_PERIOD;
+
+        transform.localPosition = Vector3.Lerp(previousPosition, currentPosition, lerp);
+
+        if (enableRotation)
+        {
+            transform.localRotation = Quaternion.Lerp(previousRotation, currentRotation, lerp);
         }
     }
 }

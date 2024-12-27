@@ -2,7 +2,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Security.Policy;
+using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class MathExtension
 {
@@ -284,6 +286,32 @@ public class MathExtension
 
     //collision detection (for frustum culling)
     //----------
+    public static bool PointInsideBox(Vector3 point, Vector3 centre, Quaternion rotation, Vector3 size)
+    {
+        Quaternion inverse = Quaternion.Inverse(rotation);
+
+        Vector3 inversePoint = inverse * (point - centre);
+
+        Vector3 halfSize = size * 0.5f;
+
+        if (inversePoint.x < -halfSize.x || inversePoint.x > halfSize.x)
+        {
+            return false;
+        }
+
+        if (inversePoint.y < -halfSize.y || inversePoint.y > halfSize.y)
+        {
+            return false;
+        }
+
+        if (inversePoint.z < -halfSize.z || inversePoint.z > halfSize.z)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
     public static bool PointInsidePlane(Plane plane, Vector3 point)
     {
         float dot = Vector3.Dot(plane.normal, point);
@@ -334,6 +362,64 @@ public class MathExtension
 
         //check the 2 spheres of the plane, the span in-between them is irrelevant
         return SphereInsidePlane(plane, c1, radius) || SphereInsidePlane(plane, c2, radius);
+    }
+
+    public static bool PointInsideCylinder(Vector3 point, Vector3 centre, float radius, float height)
+    {
+        Vector3 relative = point - centre;
+
+        float halfHeight = height * 0.5f;
+
+        if (relative.y > halfHeight)
+        {
+            return false;
+        }
+
+        if (relative.y < -halfHeight)
+        {
+            return false;
+        }
+
+        Vector2 flat = new Vector2(relative.x, relative.z);
+
+        return flat.sqrMagnitude < radius * radius;
+    }
+
+    public static Vector3 ClosestPointOnCylinder(Vector3 point, Vector3 centre, float radius, float height)
+    {
+        Vector3 relative = point - centre;
+
+        float halfHeight = height * 0.5f;
+
+        if (relative.y > halfHeight)
+        {
+            relative.y = halfHeight;
+        }
+
+        if (relative.y < -halfHeight)
+        {
+            relative.y = -halfHeight;
+        }
+
+        Vector2 flat = new Vector2(relative.x, relative.z);
+
+        if (flat.sqrMagnitude > radius * radius)
+        {
+            flat = flat.normalized * radius;
+        }
+
+        relative.x = flat.x;
+        relative.z = flat.y;
+
+        return centre + relative;
+    }
+    //----------
+
+    //advanced quaternion operations
+    //----------
+    public static void RollTowardsDirection(ref Quaternion quaternion, Vector3 centre = default)
+    {
+        
     }
     //----------
 }

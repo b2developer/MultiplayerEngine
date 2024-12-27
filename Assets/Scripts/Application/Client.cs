@@ -32,6 +32,7 @@ public class Client : MonoBehaviour
 
     public int proxyId = -1;
     public PlayerEntity proxy = null;
+    public Quaternion proxyFrame = Quaternion.identity;
 
     public List<RecievedMessage> messageBuffer;
 
@@ -55,6 +56,7 @@ public class Client : MonoBehaviour
     public InputManager inputManager;
     public ClientSidePrediction clientSidePrediction;
     public Statistics statistics;
+    public GameClient gameClient;
 
     public List<PlayerEntity> players;
 
@@ -89,6 +91,8 @@ public class Client : MonoBehaviour
 
         Physics.simulationMode = SimulationMode.Script;
 
+        objectRegistry.Initialise();
+
         updateManager.Initialise();
         UpdateManager.instance.managerFunction += Tick;
 
@@ -99,6 +103,10 @@ public class Client : MonoBehaviour
         players = new List<PlayerEntity>();
         objectRegistry.spawnPlayerCallback += OnPlayerSpawned;
         objectRegistry.destroyPlayerCallback += OnPlayerDestroyed;
+        objectRegistry.spawnShipCallback += gameClient.OnShipSpawned;
+        objectRegistry.destroyShipCallback += gameClient.OnShipDestroyed;
+
+        gameClient.Initialise();
     }
 
     //this is also "OnConnect()"
@@ -183,6 +191,8 @@ public class Client : MonoBehaviour
 
                 objectRegistry.AddPlayerAnimator(proxy);
 
+                entityManager.proxyId = proxyId;
+
                 inputManager.cameraController.focus = proxy.animator.transform;
 
                 if (inputManager.cameraController.isThirdPerson)
@@ -191,6 +201,9 @@ public class Client : MonoBehaviour
                 }
 
                 clientSidePrediction.proxy = proxy;
+
+                proxy.cameraCorrectionCallback += inputManager.cameraController.CameraCorrection;
+                proxy.setCameraCallback += inputManager.cameraController.SetCamera;
             }
         }
     }
@@ -217,12 +230,23 @@ public class Client : MonoBehaviour
 
         UpdateTimeout(Time.deltaTime);
 
+        if (proxy != null)
+        {
+            proxyFrame = Quaternion.identity;
+
+            if (proxy.transform.parent != null)
+            {
+                proxyFrame = proxy.transform.parent.rotation;
+            }
+        }
+
+        inputManager.cameraController.frame = proxyFrame;
         inputManager.PerFrameUpdate();
 
         if (proxy != null)
         {
             InputSample sample = inputManager.GetInputSample();
-            proxy.animator.transform.rotation = Quaternion.LookRotation(-sample.GetLookVector());
+            proxy.animator.transform.rotation = proxyFrame * Quaternion.LookRotation(-sample.GetLookVector());
         }
     }
 
@@ -260,8 +284,12 @@ public class Client : MonoBehaviour
 
             PreUpdateProxy();
 
-            Physics.Simulate(Time.fixedDeltaTime);
-            Physics.SyncTransforms();
+            gameClient.Tick();
+
+            if (proxy != null && !proxy.isRouted)
+            {
+                Physics.Simulate(Time.fixedDeltaTime);
+            }
 
             PostUpdateProxy();
 
@@ -362,7 +390,7 @@ public class Client : MonoBehaviour
             proxy.input = sample.Clone();
             proxy.ManualTick();
 
-            proxy.animator.interpolationFilter.SetPreviousState(proxy.animator.transform.position, proxy.animator.transform.rotation);
+            proxy.animator.interpolationFilter.SetPreviousState(proxy.animator.transform.localPosition, proxy.animator.transform.localRotation);
         }
     }
 
@@ -370,7 +398,21 @@ public class Client : MonoBehaviour
     {
         if (proxy != null)
         {
-            proxy.animator.interpolationFilter.SetCurrentState(proxy.body.position, proxy.body.rotation);
+            Vector3 position = proxy.body.position;
+
+            if (proxy.parentId >= 0)
+            {
+                position = proxy.transform.parent.InverseTransformPoint(proxy.body.position);
+            }
+
+            Quaternion rotation = proxy.body.rotation;
+
+            if (proxy.parentId >= 0)
+            {
+                rotation = Quaternion.Inverse(proxy.transform.parent.rotation) * proxy.body.rotation;
+            }
+
+            proxy.animator.interpolationFilter.SetCurrentState(position, rotation);
         }
     }
 

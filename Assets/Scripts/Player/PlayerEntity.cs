@@ -7,21 +7,31 @@ public enum EPlayerProperties
 {
     USERNAME = 1 << 7,
     BRANDING = 1 << 8,
+    RACE = 1 << 9,
+    GOLD = 1 << 10,
 }
 
 public class PlayerEntity : TransformEntity
 {
+    public delegate void CameraCorrectionFunc(Quaternion oldFrame, Quaternion newFrame);
+    public delegate void SetCameraFunc(float yaw, float pitch);
+
     //refernces to internal components
     public Rigidbody body = null;
     public CapsuleCollider capsule = null;
     public MeshRenderer meshRenderer = null;
     public PlayerCosmetics cosmetics = null;
-    public ProjectileSpawner projectileSpawner = null;
+
+    public CameraCorrectionFunc cameraCorrectionCallback;
+    public SetCameraFunc setCameraCallback;
 
     public TransformEntity animator = null;
 
     public Vector3 nameTagLocalPosition;
     public GameObject nameTag = null;
+
+    public int parentId = -1;
+    public bool isRouted = false;
 
     public string previousUsername = "";
     public string username = "";
@@ -30,7 +40,7 @@ public class PlayerEntity : TransformEntity
     public bool isLocal = false;
     public bool isServer = true;
     public bool manual = false;
-    
+
     private const float EPSILON = 0.01f;
     public const float EXACT_EPSILON = 0.01f;
 
@@ -47,6 +57,7 @@ public class PlayerEntity : TransformEntity
 
     //air physics
     public float airAcceleration = 2.0f;
+    public float airFriction = 0.8f;
 
     //jump physics
     public const float NO_GROUND_TIME = 0.2f;
@@ -71,6 +82,8 @@ public class PlayerEntity : TransformEntity
     public Vector3 previousVelocity = Vector3.zero;
     public Vector3 previousPlane = Vector3.zero;
 
+    public Quaternion frame = Quaternion.identity;
+
     public override void Initialise()
     {
         if (!isServer)
@@ -79,12 +92,34 @@ public class PlayerEntity : TransformEntity
         }
 
         base.Initialise();
-        dirtyFlagLength += 2;
+        dirtyFlagLength += 4;
+
+        cameraCorrectionCallback += DefaultFunc;
+        setCameraCallback += DefaultFunc;
+    }
+
+    public void DefaultFunc(Quaternion oldFrame, Quaternion newFrame)
+    {
+        
+    }
+
+    public void DefaultFunc(float yaw, float pitch)
+    {
+
     }
 
     public override void WriteToStream(ref BitStream stream)
     {
         base.WriteToStream(ref stream);
+
+        stream.WriteBool(parentId >= 0);
+
+        if (parentId >= 0)
+        {
+            stream.WriteInt(parentId, Settings.MAX_ENTITY_BITS);
+        }
+
+        stream.WriteBool(isRouted);
 
         //write name with some safety checks
         if (username.Length == 3)
@@ -108,6 +143,26 @@ public class PlayerEntity : TransformEntity
     public override void ReadFromStream(ref BitStream stream)
     {
         base.ReadFromStream(ref stream);
+
+        bool hasParent = stream.ReadBool();
+
+        if (hasParent)
+        {
+            parentId = stream.ReadInt(Settings.MAX_ENTITY_BITS);
+        }
+        else
+        {
+            parentId = -1;
+        }
+
+        bool wasRouted = isRouted;
+
+        isRouted = stream.ReadBool();
+
+        if (setCameraCallback != null && !wasRouted && isRouted)
+        {
+            setCameraCallback(0.0f, 0.0f);
+        }
 
         bool hasName = stream.ReadBool();
 
@@ -147,14 +202,28 @@ public class PlayerEntity : TransformEntity
     //special stream functions for sending full player information to it's associated client
     public void WritePlayerToStream(ref BitStream stream)
     {
-        stream.WriteFloat(body.position.x, 32);
-        stream.WriteFloat(body.position.y, 32);
-        stream.WriteFloat(body.position.z, 32);
+        Vector3 position = body.position;
 
-        stream.WriteFloat(body.rotation.x, 32);
-        stream.WriteFloat(body.rotation.y, 32);
-        stream.WriteFloat(body.rotation.z, 32);
-        stream.WriteFloat(body.rotation.w, 32);
+        if (parentId >= 0)
+        {
+            position = transform.parent.InverseTransformPoint(body.position);
+        }
+
+        stream.WriteFloat(position.x, 32);
+        stream.WriteFloat(position.y, 32);
+        stream.WriteFloat(position.z, 32);
+
+        Quaternion rotation = body.rotation;
+
+        if (parentId >= 0)
+        {
+            rotation = Quaternion.Inverse(transform.parent.rotation) * body.rotation;
+        }
+
+        stream.WriteFloat(rotation.x, 32);
+        stream.WriteFloat(rotation.y, 32);
+        stream.WriteFloat(rotation.z, 32);
+        stream.WriteFloat(rotation.w, 32);
 
         stream.WriteFloat(body.linearVelocity.x, 32);
         stream.WriteFloat(body.linearVelocity.y, 32);
@@ -172,6 +241,15 @@ public class PlayerEntity : TransformEntity
         stream.WriteFloat(previousPlane.x, 32);
         stream.WriteFloat(previousPlane.y, 32);
         stream.WriteFloat(previousPlane.z, 32);
+
+        stream.WriteBool(parentId >= 0);
+
+        if (parentId >= 0)
+        {
+            stream.WriteInt(parentId, Settings.MAX_ENTITY_BITS);
+        }
+
+        stream.WriteBool(isRouted);
 
         cosmetics.WriteToStream(ref stream);
     }
@@ -214,21 +292,50 @@ public class PlayerEntity : TransformEntity
 
         previousPlane = new Vector3(previousPlaneX, previousPlaneY, previousPlaneZ);
 
+        bool hasParent = stream.ReadBool();
+
+        if (hasParent)
+        {
+            parentId = stream.ReadInt(Settings.MAX_ENTITY_BITS);
+        }
+        else
+        {
+            parentId = -1;
+        }
+
+        bool wasRouted = isRouted;
+
+        isRouted = stream.ReadBool();
+
+        if (!wasRouted && isRouted)
+        {
+            setCameraCallback(0.0f, 0.0f);
+        }
+
         cosmetics.ReadFromStream(ref stream);
 
         if (!isServer)
         {
-            transform.position = position.vector;
-            transform.rotation = rotation.quaternion;
+            transform.localPosition = position.vector;
+            transform.localRotation = rotation.quaternion;
 
-            body.position = position.vector;
-            body.rotation = rotation.quaternion;
+            body.position = transform.position;
+            body.rotation = transform.rotation;
         }
     }
 
     public override int GetBitLength()
     {
         int total = base.GetBitLength();
+
+        total += 1;
+
+        if (parentId >= 0)
+        {
+            total += Settings.MAX_ENTITY_BITS;
+        }
+
+        total += 1;
 
         total += 1;
 
@@ -245,6 +352,15 @@ public class PlayerEntity : TransformEntity
     public override void WriteToStreamPartial(ref BitStream stream)
     {
         base.WriteToStreamPartial(ref stream);
+
+        stream.WriteBool(parentId >= 0);
+
+        if (parentId >= 0)
+        {
+            stream.WriteInt(parentId, Settings.MAX_ENTITY_BITS);
+        }
+
+        stream.WriteBool(isRouted);
 
         if ((dirtyFlag & (int)EPlayerProperties.USERNAME) > 0)
         {
@@ -271,6 +387,26 @@ public class PlayerEntity : TransformEntity
     public override void ReadFromStreamPartial(ref BitStream stream)
     {
         base.ReadFromStreamPartial(ref stream);
+
+        bool hasParent = stream.ReadBool();
+
+        if (hasParent)
+        {
+            parentId = stream.ReadInt(Settings.MAX_ENTITY_BITS);
+        }
+        else
+        {
+            parentId = -1;
+        }
+
+        bool wasRouted = isRouted;
+
+        isRouted = stream.ReadBool();
+
+        if (!wasRouted && isRouted)
+        {
+            setCameraCallback(0.0f, 0.0f);
+        }
 
         if ((dirtyFlag & (int)EPlayerProperties.USERNAME) > 0)
         {
@@ -316,6 +452,15 @@ public class PlayerEntity : TransformEntity
 
         total += 1;
 
+        if (parentId >= 0)
+        {
+            total += Settings.MAX_ENTITY_BITS;
+        }
+
+        total += 1;
+
+        total += 1;
+
         if ((dirtyFlag & (int)EPlayerProperties.USERNAME) > 0)
         {
             total += 15;
@@ -350,6 +495,20 @@ public class PlayerEntity : TransformEntity
             }
 
             cosmetics.previousBranding = cosmetics.branding;
+
+            if (cosmetics.previousRace != cosmetics.race)
+            {
+                dirtyFlag = dirtyFlag | (int)EPlayerProperties.RACE;
+            }
+
+            cosmetics.previousRace = cosmetics.race;
+
+            if (cosmetics.previousIsGold != cosmetics.isGold)
+            {
+                dirtyFlag = dirtyFlag | (int)EPlayerProperties.GOLD;
+            }
+
+            cosmetics.previousIsGold = cosmetics.isGold;
         }
 
         if (!manual)
@@ -359,11 +518,9 @@ public class PlayerEntity : TransformEntity
 
         if (isLocal)
         {
-            projectileSpawner.Tick();
-
             Vector2 inputVector = Vector2.zero;
 
-            if (input != null)
+            if (!isRouted && input != null)
             {
                 inputVector = input.GetMovementVector();
 
@@ -371,8 +528,6 @@ public class PlayerEntity : TransformEntity
                 inputVector = MathExtension.RotateVector2(inputVector, yaw);
             }
             //----------
-
-            currentPlane = Vector3.up;
 
             if (noGroundTimer > 0.0f)
             {
@@ -387,24 +542,48 @@ public class PlayerEntity : TransformEntity
 
             RaycastHit groundInfo;
 
-            Quaternion q = Quaternion.identity;
-            Quaternion qi = Quaternion.identity;
+            Quaternion previousFrame = frame;
+
+            if (transform.parent != null)
+            {
+                frame = transform.parent.rotation;
+            }
+
+            if (parentId < 0)
+            {
+                gravity = PlanetFinder.instance.GetGravity(this);
+            }
+            else
+            {
+                gravity = 9.81f;
+            }
+
+            Quaternion dq = frame;
+            Quaternion dqi = Quaternion.Inverse(dq);
+
+            Quaternion q = dq;
+            Quaternion qi = dqi;
+
+            Vector3 UP = frame * Vector3.up;
+            Vector3 DOWN = frame * Vector3.down;
+
+            currentPlane = UP;
 
             capsule.enabled = false;
 
             //ground collision check
-            if (noGroundTimer <= 0.0f && Physics.SphereCast(transform.position, capsule.radius * transform.localScale.x - EPSILON, Vector3.down, out groundInfo, capsuleExtent + EPSILON * 2.0f))
+            if (noGroundTimer <= 0.0f && Physics.SphereCast(transform.position, capsule.radius * transform.localScale.x - EPSILON, DOWN, out groundInfo, capsuleExtent + EPSILON * 2.0f))
             {
                 RaycastHit exactInfo;
 
                 Physics.Raycast(transform.position, (groundInfo.point - transform.position).normalized, out exactInfo, Mathf.Infinity);
 
                 //walking angle check
-                if (Vector3.Angle(Vector3.up, exactInfo.normal) <= maxWalkAngle)
+                if (Vector3.Angle(UP, exactInfo.normal) <= maxWalkAngle)
                 {
                     currentPlane = exactInfo.normal;
 
-                    q = Quaternion.FromToRotation(Vector3.up, currentPlane);
+                    q = Quaternion.FromToRotation(UP, currentPlane) * frame;
                     qi = Quaternion.Inverse(q);
 
                     groundBody = exactInfo.collider.GetComponent<Rigidbody>();
@@ -412,11 +591,14 @@ public class PlayerEntity : TransformEntity
                     //readjust the velocity to slide down the plane instead of bounce off it
                     if (!wasGrounded)
                     {
-                        body.linearVelocity = q * new Vector3(previousVelocity.x, 0.0f, previousVelocity.z);
+                        Vector3 previousFlatVelocity = qi * previousVelocity;
+                        previousFlatVelocity.y = 0.0f;
+
+                        body.linearVelocity = q * previousFlatVelocity;
                     }
 
                     grounded = true;
-                    walkAngle = Vector3.Angle(Vector3.up, currentPlane);
+                    walkAngle = Vector3.Angle(UP, currentPlane);
                     airTimer = 0.0f;
                 }
             }
@@ -426,27 +608,33 @@ public class PlayerEntity : TransformEntity
             {
                 //ratio of current velocity to apply
                 float t = Mathf.Tan(walkAngle * Mathf.Deg2Rad);
-                Vector2 horizontalVelocity = new Vector2(body.linearVelocity.x, body.linearVelocity.z);
+
+                Vector3 flatVelocity = qi * body.linearVelocity;
+                Vector2 horizontalVelocity = new Vector2(flatVelocity.x, flatVelocity.z);
 
                 //additional distance for the ground check
                 float additionalDistance = horizontalVelocity.magnitude * t * Time.fixedDeltaTime;
 
-                if (Physics.SphereCast(transform.position, capsule.radius * transform.localScale.x - EPSILON, Vector3.down, out groundInfo, capsuleExtent + EPSILON * 2.0f + additionalDistance))
+                if (Physics.SphereCast(transform.position, capsule.radius * transform.localScale.x - EPSILON, DOWN, out groundInfo, capsuleExtent + EPSILON * 2.0f + additionalDistance))
                 {
                     RaycastHit exactInfo;
 
-                    Physics.SphereCast(transform.position, EXACT_EPSILON, ((groundInfo.point + new Vector3(horizontalVelocity.x, 0.0f, horizontalVelocity.y).normalized * EXACT_EPSILON) - transform.position).normalized, out exactInfo, Mathf.Infinity);
+                    Physics.SphereCast(transform.position, EXACT_EPSILON, ((groundInfo.point + q * new Vector3(horizontalVelocity.x, 0.0f, horizontalVelocity.y).normalized * EXACT_EPSILON) - transform.position).normalized, out exactInfo, Mathf.Infinity);
 
                     //walking angle check
-                    if (Vector3.Angle(Vector3.up, exactInfo.normal) <= maxWalkAngle)
+                    if (Vector3.Angle(UP, exactInfo.normal) <= maxWalkAngle)
                     {
                         currentPlane = exactInfo.normal;
 
-                        q = Quaternion.FromToRotation(Vector3.up, currentPlane);
+                        q = Quaternion.FromToRotation(UP, currentPlane) * frame;
                         qi = Quaternion.Inverse(q);
 
-                        transform.position = groundInfo.point + groundInfo.normal * (capsule.radius * transform.localScale.x - EPSILON) + Vector3.up * (capsuleExtent + EPSILON * 1.0f);
-                        body.linearVelocity = q * new Vector3(body.linearVelocity.x, 0.0f, body.linearVelocity.z);
+                        transform.position = groundInfo.point + groundInfo.normal * (capsule.radius * transform.localScale.x - EPSILON) + UP * (capsuleExtent + EPSILON * 1.0f);
+
+                        Vector3 flatVelocity2 = qi * body.linearVelocity;
+                        flatVelocity2.y = 0.0f;
+
+                        body.linearVelocity = q * flatVelocity2;
 
                         grounded = true;
                     }
@@ -509,37 +697,18 @@ public class PlayerEntity : TransformEntity
             }
             else
             {
-                //source engine style air-strafing
-                Vector2 horizontalVelocity = new Vector2(body.linearVelocity.x, body.linearVelocity.z);
+                //old-fashioned aerial movement
+                body.linearVelocity += dq * (airAcceleration * Time.fixedDeltaTime * new Vector3(inputVector.x, 0.0f, inputVector.y));
 
-                Vector2 horizontalDirection = horizontalVelocity.normalized;
-
-                float magnitude = horizontalVelocity.magnitude;
-
-                Vector2 a = inputVector;
-                float aMagnitude = a.magnitude;
-
-                Vector2 ta = airAcceleration * Time.fixedDeltaTime * inputVector;
-                float taMagnitude = ta.magnitude;
-
-                float vprojta = magnitude * Mathf.Cos(Vector2.Angle(horizontalVelocity, ta) * Mathf.Deg2Rad);
-
-                Vector2 newVelocity = Vector2.zero;
-
-                if (vprojta < maxAirSpeed - taMagnitude)
+                //apply friction if the player isn't moving
+                if (inputVector == Vector2.zero)
                 {
-                    newVelocity = horizontalVelocity + ta;
-                }
-                else if (vprojta < maxAirSpeed)
-                {
-                    newVelocity = horizontalVelocity + (maxAirSpeed - vprojta) * a.normalized;
-                }
-                else
-                {
-                    newVelocity = horizontalVelocity;
-                }
+                    float frictionScalar = Mathf.Pow(airFriction, Time.fixedDeltaTime);
 
-                body.linearVelocity = new Vector3(newVelocity.x, body.linearVelocity.y, newVelocity.y);
+                    Vector3 flatVelocity = dqi * body.linearVelocity;
+                    flatVelocity = new Vector3(flatVelocity.x * frictionScalar, flatVelocity.y, flatVelocity.z * frictionScalar);
+                    body.linearVelocity = dq * flatVelocity;
+                }
 
                 //increment air timer
                 airTimer += Time.fixedDeltaTime;
@@ -556,14 +725,16 @@ public class PlayerEntity : TransformEntity
                 //ground movement
                 if (input != null && input.jump.state == EButtonState.ON_PRESS)
                 {
-                    body.linearVelocity = new Vector3(body.linearVelocity.x, jumpPower, body.linearVelocity.z);
+                    Vector3 flatVelocity = dqi * body.linearVelocity;
+                    flatVelocity = new Vector3(flatVelocity.x, jumpPower, flatVelocity.z);
+                    body.linearVelocity = dq * flatVelocity;
 
                     noGroundTimer = NO_GROUND_TIME;
                     airTimer = AIR_TIME;
 
                     groundBody = null;
-                    q = Quaternion.identity;
-                    qi = Quaternion.identity;
+                    q = dq;
+                    qi = dqi;
                 }
             }
             else
@@ -574,41 +745,43 @@ public class PlayerEntity : TransformEntity
                     //ground movement
                     if (input != null && input.jump.state == EButtonState.ON_PRESS)
                     {
-                        body.linearVelocity = new Vector3(body.linearVelocity.x, jumpPower, body.linearVelocity.z);
+                        Vector3 flatVelocity = dqi * body.linearVelocity;
+                        flatVelocity = new Vector3(flatVelocity.x, jumpPower, flatVelocity.z);
+                        body.linearVelocity = dq * flatVelocity;
 
                         noGroundTimer = NO_GROUND_TIME;
                         airTimer = AIR_TIME;
 
                         groundBody = null;
-                        q = Quaternion.identity;
-                        qi = Quaternion.identity;
+                        q = dq;
+                        qi = dqi;
                     }
                 }
 
                 //apply gravity
-                body.linearVelocity += gravity * Time.fixedDeltaTime * Vector3.down;
+                body.linearVelocity += gravity * Time.fixedDeltaTime * DOWN;
             }
 
             Vector3 groundSpeed = qi * body.linearVelocity;
             Vector2 horizontalSpeed = new Vector2(groundSpeed.x, groundSpeed.z);
 
             //clamp speed
-            if (grounded && horizontalSpeed.sqrMagnitude > maxSpeed * maxSpeed)
+            if (horizontalSpeed.sqrMagnitude > maxSpeed * maxSpeed)
             {
                 horizontalSpeed = horizontalSpeed.normalized * maxSpeed;
                 body.linearVelocity = q * new Vector3(horizontalSpeed.x, groundSpeed.y, horizontalSpeed.y);
             }
 
             //apply downward force to ground (if it is a rigidbody)
-            if (groundBody != null)
-            {
-                Vector3 contact = transform.position + Vector3.down * capsuleExtent - capsule.radius * transform.localScale.x * currentPlane;
+            //if (groundBody != null)
+            //{
+                //Vector3 contact = transform.position + Vector3.down * capsuleExtent - capsule.radius * transform.localScale.x * currentPlane;
 
-                float forceDot = Vector3.Dot(Vector3.down, -currentPlane);
+                //float forceDot = Vector3.Dot(Vector3.down, -currentPlane);
 
-                groundBody.AddForceAtPosition(gravity * body.mass * forceDot * Vector3.down, contact);
-                body.AddForce(-gravity * forceDot * currentPlane, ForceMode.Acceleration);
-            }
+                //groundBody.AddForceAtPosition(gravity * body.mass * forceDot * Vector3.down, contact);
+                //body.AddForce(-gravity * forceDot * currentPlane, ForceMode.Acceleration);
+            //}
 
             wasGrounded = grounded;
             previousVelocity = body.linearVelocity;
@@ -624,6 +797,19 @@ public class PlayerEntity : TransformEntity
         {
             base.Tick();
         }
+    }
+
+    public void BaseTick()
+    {
+        previousPosition = Vector3.zero;
+        previousRotation = Quaternion.identity;
+
+        base.Tick();
+    }
+
+    public void LateTick()
+    {
+        
     }
 
     public new void Update()

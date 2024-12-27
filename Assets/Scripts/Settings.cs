@@ -93,12 +93,12 @@ public class Settings
     public static int MAX_TICKET_BITS = 0;
 
     //fixed point settings
-    public const float WORLD_MIN_X = -30.0f;
-    public const float WORLD_MIN_Y = -1.0f;
-    public const float WORLD_MIN_Z = -25.0f;
-    public const float WORLD_MAX_X = 30.0f;
-    public const float WORLD_MAX_Y = 23.0f;
-    public const float WORLD_MAX_Z = 15.0f;
+    public const float WORLD_MIN_X = -250.0f;
+    public const float WORLD_MIN_Y = -100.0f;
+    public const float WORLD_MIN_Z = -250.0f;
+    public const float WORLD_MAX_X = 250.0f;
+    public const float WORLD_MAX_Y = 100.0f;
+    public const float WORLD_MAX_Z = 250.0f;
 
     //overflow settings
     public const int MAX_MESSAGE_QUEUE_SIZE = 8;
@@ -127,6 +127,9 @@ public class Settings
 
         if (buildType == EBuildType.SERVER)
         {
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = 300;
+
             return;
         }
 

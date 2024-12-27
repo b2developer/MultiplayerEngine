@@ -9,8 +9,10 @@ public class UpdateManager : MonoBehaviour
     public delegate void TickFunction();
 
     public static UpdateManager instance = null;
+    public TickFunction preFunction;
     public TickFunction entityFunction;
     public TickFunction managerFunction;
+    public TickFunction postFunction;
 
     public float timer = 0.0f;
     public float maxTimer = 0.2f;
@@ -19,8 +21,10 @@ public class UpdateManager : MonoBehaviour
     {
         instance = this;
 
+        preFunction += DefaultFunction;
         entityFunction += DefaultFunction;
         managerFunction += DefaultFunction;
+        postFunction += DefaultFunction;
     }
 
     void Update()
@@ -33,8 +37,20 @@ public class UpdateManager : MonoBehaviour
 
         if (timer > Time.fixedDeltaTime)
         {
+            preFunction();
+
+            Physics.SyncTransforms();
+
             entityFunction();
             managerFunction();
+        }
+    }
+
+    void LateUpdate()
+    {
+        if (timer > Time.fixedDeltaTime)
+        {
+            postFunction();
             timer -= Time.fixedDeltaTime;
         }
     }

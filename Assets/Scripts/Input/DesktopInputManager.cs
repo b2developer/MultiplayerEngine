@@ -49,7 +49,7 @@ public class DesktopInputManager : InputManager
 
         sample.pitch = 0.0f;
 
-        if (!cameraController.isThirdPerson)
+        if (!cameraController.isThirdPerson || cameraController.isRouted)
         {
             sample.pitch = cameraController.pitch;
         }

@@ -22,6 +22,8 @@ public class MenuManager : MonoBehaviour
     
     public List<GameObject> stack;
 
+    public GameObject loading;
+
     //game information
     public RawImage crosshair;
 
@@ -97,6 +99,7 @@ public class MenuManager : MonoBehaviour
     
     public virtual void PerFrameUpdate()
     {
+        UpdateLoading();
         UpdateCrosshair();
         UpdateWarning();
 
@@ -108,6 +111,21 @@ public class MenuManager : MonoBehaviour
         if (isTyping)
         {
             UpdateTyping();
+        }
+    }
+
+    public void UpdateLoading()
+    {
+        if (loading == null)
+        {
+            return;
+        }
+
+        loading.SetActive(client.proxyId < 0);
+
+        if (loading.activeSelf)
+        {
+            Cursor.lockState = CursorLockMode.None;
         }
     }
 
@@ -259,7 +277,7 @@ public class MenuManager : MonoBehaviour
 
     public void UpdateCrosshair()
     {
-        crosshair.enabled = !client.inputManager.cameraController.isThirdPerson;
+        //crosshair.enabled = !client.inputManager.cameraController.isThirdPerson;
     }
 
     public void UpdateWarning()
