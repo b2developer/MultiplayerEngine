@@ -4,6 +4,12 @@ using UnityEngine;
 
 public class ShipEntity : TransformEntity
 {
+    public static Vector3 BLACKHOLE_POSITION = new Vector3(-100f, -9.5f, -250f);
+    public static float BLACKHOLE_MAX_DIST = 12.5f;
+    public static float BLACKHOLE_MIN_DIST = 150.0f;
+    public static float BLACKHOLE_STRENGTH_MAX = 0.9f;
+    public static float BLACKHOLE_STRENGTH_MIN = 0.0f;
+
     public Vector3 startingPosition;
     public Quaternion startingRotation;
 
@@ -101,6 +107,30 @@ public class ShipEntity : TransformEntity
     {
         Vector2 inputVector = Vector2.zero;
 
+        bool isBeingPulled = false;
+
+        Vector3 blackholeRelative = BLACKHOLE_POSITION - transform.position;
+
+        float blackholeDistSqr = blackholeRelative.sqrMagnitude;
+
+        if (blackholeDistSqr > BLACKHOLE_MAX_DIST * BLACKHOLE_MAX_DIST && blackholeDistSqr < BLACKHOLE_MIN_DIST * BLACKHOLE_MIN_DIST)
+        {
+            float blackholeDist = Mathf.Sqrt(blackholeDistSqr);
+
+            float lerp = Mathf.InverseLerp(BLACKHOLE_MAX_DIST, BLACKHOLE_MIN_DIST, blackholeDist);
+
+            lerp = 1.0f - lerp;
+            lerp *= lerp;
+            lerp = 1.0f - lerp;
+
+            float power = Mathf.Lerp(BLACKHOLE_STRENGTH_MAX, BLACKHOLE_STRENGTH_MIN, lerp) * ACCELERATION;
+
+            body.linearVelocity += (blackholeRelative / blackholeDist) * power * Time.fixedDeltaTime;
+
+            isBeingPulled = true;
+        }
+
+
         if (controller != null)
         {
             Vector3 lookVector = Vector3.zero;
@@ -184,43 +214,58 @@ public class ShipEntity : TransformEntity
             Vector3 input3 = new Vector3(-inputVector.x, 0.0f, inputVector.y);
             Vector3 acceleration = transform.rotation * input3 * ACCELERATION;
 
-            body.linearVelocity += acceleration * Time.fixedDeltaTime;
-
             float magnitude = body.linearVelocity.sqrMagnitude;
 
             if (magnitude > MAX_SPEED * MAX_SPEED)
             {
-                float ratio = MAX_SPEED / body.linearVelocity.magnitude;
-                body.linearVelocity *= ratio;
-            }
+                float NEW_SPEED = Mathf.Sqrt(magnitude);
 
-            if (inputVector == Vector2.zero)
-            {
-                float frictionScalar = Mathf.Pow(FRICTION, Time.fixedDeltaTime);
-                body.linearVelocity *= frictionScalar;
+                body.linearVelocity += acceleration * Time.fixedDeltaTime;
+
+                float magnitude2 = body.linearVelocity.sqrMagnitude;
+
+                if (magnitude2 > NEW_SPEED * NEW_SPEED)
+                {
+                    float ratio = NEW_SPEED / body.linearVelocity.magnitude;
+                    body.linearVelocity *= ratio;
+                }
             }
             else
-            { 
-                float sideFrictionScalar = Mathf.Pow(SIDE_FRICTION, Time.fixedDeltaTime);
+            {
+                body.linearVelocity += acceleration * Time.fixedDeltaTime;
+            }
 
-                Vector3 forward = acceleration.normalized;
-                Vector3 normal = Vector3.Cross(forward, Vector3.up);
-                Vector3 biNormal = Vector3.Cross(normal, forward);
+            if (!isBeingPulled)
+            {
+                if (inputVector == Vector2.zero)
+                {
+                    float frictionScalar = Mathf.Pow(FRICTION, Time.fixedDeltaTime);
+                    body.linearVelocity *= frictionScalar;
+                }
+                else
+                {
+                    float sideFrictionScalar = Mathf.Pow(SIDE_FRICTION, Time.fixedDeltaTime);
 
-                float f = Vector3.Dot(body.linearVelocity, forward);
-                float n = Vector3.Dot(body.linearVelocity, normal);
-                float bn = Vector3.Dot(body.linearVelocity, biNormal);
+                    Vector3 forward = acceleration.normalized;
+                    Vector3 normal = Vector3.Cross(forward, Vector3.up);
+                    Vector3 biNormal = Vector3.Cross(normal, forward);
 
-                n *= sideFrictionScalar;
-                bn *= sideFrictionScalar;
+                    float f = Vector3.Dot(body.linearVelocity, forward);
+                    float n = Vector3.Dot(body.linearVelocity, normal);
+                    float bn = Vector3.Dot(body.linearVelocity, biNormal);
 
-                body.linearVelocity = forward * f + normal * n + biNormal * bn;
+                    n *= sideFrictionScalar;
+                    bn *= sideFrictionScalar;
+
+                    body.linearVelocity = forward * f + normal * n + biNormal * bn;
+                }
             }
         }
         else
         {
             Vector3 direction = transform.rotation * Vector3.forward;
 
+            if (!isBeingPulled)
             {
                 float frictionScalar = Mathf.Pow(FRICTION, Time.fixedDeltaTime);
                 body.linearVelocity *= frictionScalar;
@@ -257,7 +302,7 @@ public class ShipEntity : TransformEntity
                 {
                     transform.position += Vector3.up * DRIFT * Time.fixedDeltaTime;
                 }
-                else if (transform.position.y > GameServer.DEATH_Y - CUSHION)
+                else if (transform.position.y > -GameServer.DEATH_Y - CUSHION)
                 {
                     transform.position -= Vector3.up * DRIFT * Time.fixedDeltaTime;
                 }
@@ -286,6 +331,15 @@ public class ShipEntity : TransformEntity
                     controller.frame = Quaternion.identity;
                     controller.isRouted = false;
                     controller.transform.SetParent(null);
+
+                    PlayerEntity[] players = GetComponentsInChildren<PlayerEntity>();
+
+                    for (int i = 0; i < players.Length; i++)
+                    {
+                        players[i].parentId = -1;
+                        players[i].frame = Quaternion.identity;
+                        players[i].transform.SetParent(null);
+                    }
 
                     controller = null;
                 }

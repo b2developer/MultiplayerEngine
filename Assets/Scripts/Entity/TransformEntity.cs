@@ -386,6 +386,16 @@ public class ColliderCache
     public BoxCollider[] boxes;
     public CapsuleCollider[] capsules;
 
+    public Vector3[] sphereCentres;
+    public float[] sphereRadiuses;
+
+    public Vector3[] boxCentres;
+    public Vector3[] boxSizes;
+
+    public Vector3[] capsuleCentres;
+    public float[] capsuleRadiuses;
+    public float[] capsuleHeights;
+
     public ColliderCache()
     {
 
@@ -398,5 +408,34 @@ public class ColliderCache
         capsules = gameObject.GetComponentsInChildren<CapsuleCollider>();
 
         isEmpty = spheres.Length == 0 && boxes.Length == 0 && capsules.Length == 0;
+
+        sphereCentres = new Vector3[spheres.Length];
+        sphereRadiuses = new float[spheres.Length];
+
+        for (int i = 0; i < spheres.Length; i++)
+        {
+            sphereCentres[i] = spheres[i].center;
+            sphereRadiuses[i] = spheres[i].radius;
+        }
+
+        boxCentres = new Vector3[boxes.Length];
+        boxSizes = new Vector3[boxes.Length];
+
+        for (int i = 0; i < boxes.Length; i++)
+        {
+            boxCentres[i] = boxes[i].center;
+            boxSizes[i] = boxes[i].size;
+        }
+
+        capsuleCentres = new Vector3[capsules.Length];
+        capsuleRadiuses = new float[capsules.Length];
+        capsuleHeights = new float[capsules.Length];
+
+        for (int i = 0; i < capsules.Length; i++)
+        {
+            capsuleCentres[i] = capsules[i].center;
+            capsuleRadiuses[i] = capsules[i].radius;
+            capsuleHeights[i] = capsules[i].height;
+        }
     }
 }

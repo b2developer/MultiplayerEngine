@@ -1,16 +1,20 @@
 using System;
 using System.Collections.Generic;
-using Unity.VisualScripting;
+using System.Data;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 public class FrustumCulling : Culling
 {
+    public delegate LookupTable<TransformCache> GetTransformCacheFunc();
+
     public static float FIELD_OF_VIEW = 60.0f;
     public static float ASPECT_RATIO = 1920.0f / 1080.0f;
     public static float INFLATION = 10.0f;
     public float fovH = 0.0f;
-    
+
+    public GetTransformCacheFunc getTransformCacheCallback;
+    public LookupTable<TransformCache> transformCacheLookup = null;
+
     //there is a weird forumla for this
     public void CalculateHorizontalFieldOfView()
     {
@@ -20,6 +24,8 @@ public class FrustumCulling : Culling
 
     public override bool ApplyCulling(Entity entity, List<PlayerEntity> group)
     {
+        transformCacheLookup = getTransformCacheCallback();
+
         TransformEntity transformEntity = entity as TransformEntity;
 
         //this isn't a transform entity, it will pass by default
@@ -42,6 +48,8 @@ public class FrustumCulling : Culling
             return true;
         }
 
+        TransformCache transformCache = transformCacheLookup.Grab((int)transformEntity.id);
+
         //groups apply OR logic, only one distance check has to succeed
         for (int i = 0; i < count; i++)
         {
@@ -57,8 +65,8 @@ public class FrustumCulling : Culling
 
                 for (int k = 0; k < cache.spheres.Length; k++)
                 {
-                    Vector3 centre = transformEntity.transform.TransformPoint(cache.spheres[k].center);
-                    float radius = transformEntity.transform.localScale.x * cache.spheres[k].radius;
+                    Vector3 centre = transformCache.TransformPoint(cache.sphereCentres[k]);
+                    float radius = transformCache.scale.x * cache.sphereRadiuses[k];
 
                     if (MathExtension.SphereInsidePlane(plane, centre, radius))
                     {
@@ -72,10 +80,10 @@ public class FrustumCulling : Culling
                 {
                     for (int k = 0; k < cache.boxes.Length; k++)
                     {
-                        Vector3 centre = transformEntity.transform.TransformPoint(cache.boxes[k].center);
-                        Vector3 size = new Vector3(transformEntity.transform.localScale.x * cache.boxes[k].size.x, transformEntity.transform.localScale.y * cache.boxes[k].size.y, transformEntity.transform.localScale.z * cache.boxes[k].size.z);
+                        Vector3 centre = transformCache.TransformPoint(cache.boxCentres[k]);
+                        Vector3 size = new Vector3(transformCache.scale.x * cache.boxSizes[k].x, transformCache.scale.y * cache.boxSizes[k].y, transformCache.scale.z * cache.boxSizes[k].z);
 
-                        if (MathExtension.BoxInsidePlane(plane, centre, transformEntity.transform.rotation, size))
+                        if (MathExtension.BoxInsidePlane(plane, centre, transformCache.rotation, size))
                         {
                             success = true;
                             successCount++;
@@ -88,10 +96,10 @@ public class FrustumCulling : Culling
                 {
                     for (int k = 0; k < cache.capsules.Length; k++)
                     {
-                        Vector3 centre = transformEntity.transform.TransformPoint(cache.capsules[k].center);
-                        float radius = transformEntity.transform.localScale.x * cache.capsules[k].radius;
-                        Vector3 direction = transformEntity.transform.TransformDirection(Vector3.up);
-                        float height = transformEntity.transform.localScale.x * cache.capsules[k].height;
+                        Vector3 centre = transformCache.TransformPoint(cache.capsuleCentres[k]);
+                        float radius = transformCache.scale.x * cache.capsuleRadiuses[k];
+                        Vector3 direction = transformCache.TransformDirection(Vector3.up);
+                        float height = transformCache.scale.x * cache.capsuleHeights[k];
 
                         if (MathExtension.CapsuleInsidePlane(plane, centre, radius, direction, height))
                         {
@@ -119,33 +127,39 @@ public class FrustumCulling : Culling
 
     public Plane[] GetFrustumPlanes(PlayerEntity player)
     {
+        transformCacheLookup = getTransformCacheCallback();
+
+        TransformCache transformCache = transformCacheLookup.Grab((int)player.id);
+
         Plane[] planes = new Plane[4];
 
-        Vector3 look = player.transform.forward;
+        Vector3 forward = transformCache.rotation * Vector3.forward;
+
+        Vector3 look = forward;
         
         for (int i = 0; i < 2; i++)
         {
-            look = player.transform.forward;
+            look = forward;
 
             int xSign = (i & 0x1) * 2 - 1;
             float xOffset = -90.0f * xSign;
 
             Vector3 normal = MathExtension.RotateWithYawPitch(look, (fovH * 0.5f + INFLATION) * xSign + xOffset, 0.0f);
 
-            Plane plane = new Plane(player.transform.position, normal);
+            Plane plane = new Plane(transformCache.position, normal);
             planes[i] = plane;
         }
 
         for (int i = 0; i < 2; i++)
         {
-            look = player.transform.forward;
+            look = forward;
 
             int ySign = (i & 0x1) * 2 - 1;
             float yOffset = -90.0f * ySign;
 
             Vector3 normal = MathExtension.RotateWithYawPitch(look, 0.0f, (FIELD_OF_VIEW * 0.5f + INFLATION) * ySign + yOffset);
 
-            Plane plane = new Plane(player.transform.position, normal);
+            Plane plane = new Plane(transformCache.position, normal);
             planes[i + 2] = plane;
         }
 
@@ -161,5 +175,16 @@ public class FrustumCulling : Culling
         }
 
         return entity.colliderCache;
+    }
+
+    public override Culling Clone()
+    {
+        FrustumCulling frustumCulling = new FrustumCulling();
+
+        frustumCulling.mode = mode;
+        frustumCulling.fovH = fovH;
+        frustumCulling.getTransformCacheCallback = getTransformCacheCallback;
+
+        return frustumCulling;
     }
 }

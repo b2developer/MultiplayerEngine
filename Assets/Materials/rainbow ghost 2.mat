@@ -71,9 +71,9 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0
     - _GlossyReflections: 1
-    - _MaxRange: 79.5
+    - _MaxRange: 162.5
     - _Metallic: 0
-    - _MinRange: 77.1
+    - _MinRange: 159.3
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Offset: 0

@@ -26,7 +26,7 @@ public class PlayerCosmetics : MonoBehaviour
     public void WriteToStream(ref BitStream stream)
     {
         stream.WriteInt((int)branding, 3);
-        stream.WriteInt(race, 4);
+        stream.WriteInt(race, 5);
         stream.WriteBool(isGold);
     }
 
@@ -40,7 +40,7 @@ public class PlayerCosmetics : MonoBehaviour
             SetBranding(branding);
         }
 
-        int newRace = stream.ReadInt(4);
+        int newRace = stream.ReadInt(5);
 
         if (race != newRace)
         {
@@ -59,7 +59,7 @@ public class PlayerCosmetics : MonoBehaviour
 
     public int GetBitLength()
     {
-        return 8;
+        return 9;
     }
 
     public void WriteToStreamPartial(ref BitStream stream, int dirtyFlag)
@@ -71,7 +71,7 @@ public class PlayerCosmetics : MonoBehaviour
 
         if ((dirtyFlag & (int)EPlayerProperties.RACE) > 0)
         {
-            stream.WriteInt((int)race, 4);
+            stream.WriteInt((int)race, 5);
         }
 
         if ((dirtyFlag & (int)EPlayerProperties.GOLD) > 0)
@@ -95,7 +95,7 @@ public class PlayerCosmetics : MonoBehaviour
 
         if ((dirtyFlag & (int)EPlayerProperties.RACE) > 0)
         {
-            int newRace = stream.ReadInt(4);
+            int newRace = stream.ReadInt(5);
 
             if (race != newRace)
             {
@@ -127,7 +127,7 @@ public class PlayerCosmetics : MonoBehaviour
 
         if ((dirtyFlag & (int)EPlayerProperties.RACE) > 0)
         {
-            total += 4;
+            total += 5;
         }
 
         if ((dirtyFlag & (int)EPlayerProperties.GOLD) > 0)

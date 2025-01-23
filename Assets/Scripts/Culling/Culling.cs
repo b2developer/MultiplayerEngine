@@ -14,4 +14,9 @@ public class Culling
     {
         return true;
     }
+
+    public virtual Culling Clone()
+    {
+        return new Culling();
+    }
 }

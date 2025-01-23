@@ -49,7 +49,7 @@ public class Settings
     }
 
     //signs buffers and prevents older clients from joining
-    public const int VERSION = 5;
+    public const int VERSION = 6;
 
     public static EPlatformType platformType;
 
@@ -93,15 +93,15 @@ public class Settings
     public static int MAX_TICKET_BITS = 0;
 
     //fixed point settings
-    public const float WORLD_MIN_X = -250.0f;
+    public const float WORLD_MIN_X = -500.0f;
     public const float WORLD_MIN_Y = -100.0f;
-    public const float WORLD_MIN_Z = -250.0f;
-    public const float WORLD_MAX_X = 250.0f;
+    public const float WORLD_MIN_Z = -500.0f;
+    public const float WORLD_MAX_X = 500.0f;
     public const float WORLD_MAX_Y = 100.0f;
-    public const float WORLD_MAX_Z = 250.0f;
+    public const float WORLD_MAX_Z = 500.0f;
 
     //overflow settings
-    public const int MAX_MESSAGE_QUEUE_SIZE = 8;
+    public const int MAX_MESSAGE_QUEUE_SIZE = 96;
     public const int MAX_CLIENT_SIDE_PREDICTION_SIZE = 40;
 
     //client smoothing settings

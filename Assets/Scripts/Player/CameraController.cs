@@ -78,7 +78,7 @@ public class CameraController : MonoBehaviour
                 TogglePerspective();
             }
 
-            range = 5.0f;
+            range = 8.0f;
         }
         else
         {

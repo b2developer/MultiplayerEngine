@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Security.Policy;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -24,6 +25,41 @@ public class WriteReplicationIndexer
     public bool isDone = false;
 }
 
+public class TransformCache
+{
+    public Vector3 position;
+    public Quaternion rotation;
+    public Vector3 scale;
+
+    public TransformCache(Vector3 _position, Quaternion _rotation, Vector3 _scale)
+    {
+        position = _position;
+        rotation = _rotation;
+        scale = _scale;
+    }
+
+    public Vector3 TransformPoint(Vector3 point)
+    {
+        point = new Vector3(point.x * scale.x, point.y * scale.y, point.z * scale.z);
+        point = rotation * point;
+        point += position;
+
+        return point;
+    }
+
+    public Vector3 TransformDirection(Vector3 direction)
+    {
+        direction = rotation * direction;
+
+        return direction;
+    }
+}
+
+public class BitCache
+{
+    public BitStream stream;
+}
+
 public class EntityManager : MonoBehaviour
 {
     public static EntityManager instance = null;
@@ -35,13 +71,16 @@ public class EntityManager : MonoBehaviour
     public DummyRegistry dummyRegistry;
     public UpdateManager updateManager;
 
-    public CullingStack cullingStack;
+    public CullingStack referenceCullingStack;
 
     public Bucket networkIds;
     public List<int> ticks;
 
     public List<Entity> entities;
     public LookupTable<Entity> lookup;
+    public LookupTable<TransformCache> transformCacheLookup;
+    public LookupTable<BitCache> bitCacheLookup;
+
     public List<uint> toDestroy;
     public List<uint> unknownToDestroy;
 
@@ -52,28 +91,34 @@ public class EntityManager : MonoBehaviour
             instance = this;
         }
 
-        cullingStack = new CullingStack();
+        referenceCullingStack = new CullingStack();
 
         networkIds = new Bucket(Settings.MAX_ENTITY_INDEX);
         ticks = new List<int>();
 
         entities = new List<Entity>();
+        
         lookup = new LookupTable<Entity>(Settings.MAX_ENTITY_INDEX);
+        transformCacheLookup = new LookupTable<TransformCache>(Settings.MAX_ENTITY_INDEX);
+        bitCacheLookup = new LookupTable<BitCache>(Settings.MAX_ENTITY_INDEX);
+
         toDestroy = new List<uint>();
         unknownToDestroy = new List<uint>();
 
         GenerateFullTicks();
 
-        //generate culling stack
+        //generate reference culling stack
         DistanceCulling distanceCulling = new DistanceCulling();
         distanceCulling.mode = ECullingMode.REQUIREMENT;
         distanceCulling.CalculateSquareDistance();
-        cullingStack.stack.Add(distanceCulling);
+        distanceCulling.getTransformCacheCallback = GetTransformCacheData;
+        referenceCullingStack.stack.Add(distanceCulling);
 
         FrustumCulling frustumCulling = new FrustumCulling();
         distanceCulling.mode = ECullingMode.OPTIONAL;
         frustumCulling.CalculateHorizontalFieldOfView();
-        cullingStack.stack.Add(frustumCulling);
+        frustumCulling.getTransformCacheCallback = GetTransformCacheData;
+        referenceCullingStack.stack.Add(frustumCulling);
     }
 
     public void Dump()
@@ -86,6 +131,8 @@ public class EntityManager : MonoBehaviour
         {
             Entity item = entities[i];
             lookup.Remove((int)item.id);
+            transformCacheLookup.Remove((int)item.id);
+            bitCacheLookup.Remove((int)item.id);
 
             updateManager.entityFunction -= item.Tick;
 
@@ -125,6 +172,7 @@ public class EntityManager : MonoBehaviour
             if (item.id == id)
             {
                 lookup.Remove((int)item.id);
+                transformCacheLookup.Remove((int)item.id);
 
                 updateManager.entityFunction -= item.Tick;
 
@@ -167,6 +215,8 @@ public class EntityManager : MonoBehaviour
             if (item.id == id)
             {
                 lookup.Remove((int)item.id);
+                transformCacheLookup.Remove((int)item.id);
+                bitCacheLookup.Remove((int)item.id);
 
                 updateManager.entityFunction -= item.Tick;
 
@@ -272,6 +322,31 @@ public class EntityManager : MonoBehaviour
         entities.Sort();
     }
 
+    public void CacheTransformData()
+    {
+        int count = entities.Count;
+
+        for (int i = 0; i < count; i++)
+        {
+            Entity item = entities[i];
+
+            TransformEntity transformItem = item as TransformEntity;
+
+            if (transformItem == null)
+            {
+                continue;
+            }
+
+            TransformCache transformCache = new TransformCache(transformItem.transform.position, transformItem.transform.rotation, transformItem.transform.localScale);
+            transformCacheLookup.Place(transformCache, (int)item.id);
+        }
+    }
+
+    public LookupTable<TransformCache> GetTransformCacheData()
+    {
+        return transformCacheLookup;
+    }
+
     //writes all replication data, without any sort of overflow protection
     public void WriteReplicationDataNaive(ref BitStream stream)
     {
@@ -311,7 +386,7 @@ public class EntityManager : MonoBehaviour
     }
 
     //writes all replication data for unreliable sources, utilising dirty flags, with multipass for loops
-    public WriteReplicationIndexer WriteReplicationDataPartialOnlyIndexed(ref BitStream stream, WriteReplicationIndexer previousIndexer = null)
+    public WriteReplicationIndexer WriteReplicationDataPartialOnlyIndexed(ref BitStream stream, ref CullingStack cullingStack, WriteReplicationIndexer previousIndexer = null)
     {
         int maxBits = Settings.BUFFER_LIMIT * 8;
 
@@ -519,7 +594,7 @@ public class EntityManager : MonoBehaviour
     }
 
     //writes all replication data for unreliable sources, with multipass for loops
-    public WriteReplicationIndexer WriteReplicationDataIndexed(ref BitStream stream, WriteReplicationIndexer previousIndexer = null, int tick = 0, int limit = 0)
+    public WriteReplicationIndexer WriteReplicationDataIndexed(ref BitStream stream, ref CullingStack cullingStack, WriteReplicationIndexer previousIndexer = null, int tick = 0, int limit = 0)
     {
         int maxBits = Settings.BUFFER_LIMIT * 8;
 
@@ -593,6 +668,173 @@ public class EntityManager : MonoBehaviour
                 {
                     stream.WriteBits((int)EReplication.UPDATE, 3);
                     item.WriteToStream(ref stream);
+                    indexer.writeCount++;
+                }
+            }
+
+            //limit reached
+            if (indexer.writeCount >= entityLimit)
+            {
+                uint written = indexer.writeCount - originalWriteCount;
+
+                //write final amount into buffer if all was successful
+                int finalOriginalIndex = stream.bitIndex;
+
+                stream.bitIndex = totalBitIndex;
+                stream.WriteUint(written, 32);
+
+                stream.bitIndex = finalOriginalIndex;
+
+                indexer.isDone = true;
+
+                return indexer;
+            }
+
+            indexer.totalIndex++;
+        }
+
+        //to prevent variable name clashes
+        {
+            uint written = indexer.writeCount - originalWriteCount;
+
+            //write final amount into buffer if all was successful
+            int finalOriginalIndex = stream.bitIndex;
+
+            stream.bitIndex = totalBitIndex;
+            stream.WriteUint(written, 32);
+
+            stream.bitIndex = finalOriginalIndex;
+
+            indexer.isDone = true;
+
+            return indexer;
+        }
+    }
+
+    public void CacheBits(int tick = 0)
+    {
+        int entityCount = entities.Count;
+
+        for (uint i = 0; i < entityCount; i++)
+        {
+            Entity item = entities[(int)i];
+
+            //check whether a full update is due
+            if (item.tick != tick)
+            {
+                //check if item has partial data to send
+                if (!item.isNew && item.dirtyFlag > 0)
+                {
+                    int length = item.GetBitLengthPartial();
+
+                    BitStream stream = new BitStream(length);
+                    item.WriteToStreamPartial(ref stream);
+
+                    BitCache cache = new BitCache();
+                    cache.stream = stream;
+
+                    bitCacheLookup.Place(cache, (int)item.id);
+                }
+            }
+            else
+            {
+                if (!item.isNew)
+                {
+                    int length = item.GetBitLength();
+
+                    BitStream stream = new BitStream(length);
+                    item.WriteToStream(ref stream);
+
+                    BitCache cache = new BitCache();
+                    cache.stream = stream;
+
+                    bitCacheLookup.Place(cache, (int)item.id);
+                }
+            }
+        }
+    }
+
+    //writes all replication data for unreliable sources using cached bits, with multipass for loops
+    public WriteReplicationIndexer WriteCachedReplicationDataIndexed(ref BitStream stream, ref CullingStack cullingStack, WriteReplicationIndexer previousIndexer = null, int tick = 0, int limit = 0)
+    {
+        int maxBits = Settings.BUFFER_LIMIT * 8;
+
+        WriteReplicationIndexer indexer = previousIndexer;
+
+        if (indexer == null)
+        {
+            indexer = new WriteReplicationIndexer();
+        }
+
+        //write 0 destroys on unreliable data
+        stream.WriteInt(0, Settings.MAX_ENTITY_BITS);
+
+        //int totalCount = entities.Count + rpcManager.rpcsToSend.Count;
+        int entityCount = entities.Count;
+
+        //set hard entity limit from priority (if there is one)
+        int entityLimit = entityCount + 1;
+
+        if (limit > 0)
+        {
+            entityLimit = limit;
+        }
+
+        int totalBitIndex = stream.bitIndex;
+        stream.WriteInt(0, 32);
+
+        uint originalWriteCount = indexer.writeCount;
+
+        for (uint i = indexer.totalIndex; i < entityCount; i++)
+        {
+            Entity item = entities[(int)i];
+
+            bool cullingTest = cullingStack.ApplyCulling(item);
+
+            //check culling filter
+            if (!cullingTest)
+            {
+                continue;
+            }
+
+            int size = item.GetBitLength() + 3;
+
+            //check for overflow
+            if (stream.bitIndex + size > maxBits)
+            {
+                //limit reached, rewrite total count
+                int originalIndex = stream.bitIndex;
+
+                stream.bitIndex = totalBitIndex;
+                stream.WriteUint(indexer.writeCount - originalWriteCount, 32);
+
+                stream.bitIndex = originalIndex;
+                return indexer;
+            }
+
+            //check whether a full update is due
+            if (item.tick != tick)
+            {
+                //check if item has partial data to send
+                if (!item.isNew && item.dirtyFlag > 0)
+                {
+                    stream.WriteBits((int)EReplication.UPDATE_PARTIAL, 3);
+
+                    BitCache cache = bitCacheLookup.Grab((int)item.id);
+                    stream.WriteBytes(cache.stream.buffer, cache.stream.bitIndex);
+
+                    indexer.writeCount++;
+                }
+            }
+            else
+            {
+                if (!item.isNew)
+                {
+                    stream.WriteBits((int)EReplication.UPDATE, 3);
+
+                    BitCache cache = bitCacheLookup.Grab((int)item.id);
+                    stream.WriteBytes(cache.stream.buffer, cache.stream.bitIndex);
+
                     indexer.writeCount++;
                 }
             }

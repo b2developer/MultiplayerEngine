@@ -430,6 +430,10 @@ public class MovingAverage
 
     public int maxValues = 1;
 
+    //efficiency and accuracy check
+    float sum = 0.0f;
+    int lossy = 0;
+
     public MovingAverage(int _maxValues)
     {
         values = new List<float>();
@@ -439,30 +443,51 @@ public class MovingAverage
     public void Update(float newValue)
     {
         values.Add(newValue);
+        sum += newValue;
 
         if (values.Count > maxValues)
         {
+            sum -= values[0];
             values.RemoveAt(0);
         }
     }
 
     public float GetAverage()
     {
-        int count = values.Count;
+        lossy++;
 
-        if (count == 0)
+        if (lossy < 100)
         {
-            return 0.0f;
+            int count = values.Count;
+
+            if (count == 0)
+            {
+                return 0.0f;
+            }
+
+            return sum / (float)count;
         }
-
-        float sum = 0.0f;
-
-        for (int i = 0; i < count; i++)
+        else
         {
-            sum += values[i];
-        }
+            lossy = 0;
 
-        return sum / (float)count;
+            int count = values.Count;
+            float tempSum = 0.0f;
+
+            if (count == 0)
+            {
+                return 0.0f;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                tempSum += values[i];
+            }
+
+            sum = tempSum;
+
+            return tempSum / (float)count;
+        }
     }
 }
 

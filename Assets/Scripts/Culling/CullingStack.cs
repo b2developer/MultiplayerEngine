@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.VisualScripting;
 
 //wrapper class for cullers, checks all filters at once
 public class CullingStack
@@ -40,6 +41,23 @@ public class CullingStack
             }
         }
 
-        return hadRequirement;
+        return hadRequirement || stackCount == 0;
+    }
+
+    public CullingStack Clone()
+    {
+        CullingStack clone = new CullingStack();
+
+        int count = stack.Count;
+
+        for (int i = 0; i < count; i++)
+        {
+            Culling culling = stack[i];
+            Culling clonedCulling = culling.Clone();
+
+            clone.stack.Add(clonedCulling);
+        }
+
+        return clone;
     }
 }
