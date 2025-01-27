@@ -16,6 +16,8 @@ public class PlayerEntity : TransformEntity
     public delegate void CameraCorrectionFunc(Quaternion oldFrame, Quaternion newFrame);
     public delegate void SetCameraFunc(float yaw, float pitch);
 
+    public static float CONTINUOUS_SWITCH = 5.0f;
+
     //refernces to internal components
     public Rigidbody body = null;
     public CapsuleCollider capsule = null;
@@ -509,6 +511,17 @@ public class PlayerEntity : TransformEntity
             }
 
             cosmetics.previousIsGold = cosmetics.isGold;
+
+            float speed = body.linearVelocity.sqrMagnitude;
+
+            if (speed > CONTINUOUS_SWITCH * CONTINUOUS_SWITCH)
+            {
+                body.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            }
+            else
+            {
+                body.collisionDetectionMode = CollisionDetectionMode.Discrete;
+            }
         }
 
         if (!manual)

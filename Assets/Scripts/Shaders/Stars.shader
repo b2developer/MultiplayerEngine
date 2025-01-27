@@ -3,7 +3,9 @@ Shader "Custom/Stars"
     Properties
     {
         _Color("Color", Color) = (1,1,1,1)
-        _MainTex("Albedo (RGB)", 2D) = "white" {}
+        _Glossiness("Smoothness", Range(0,1)) = 0.5
+        _Metallic("Metallic", Range(0,1)) = 0.0
+        _N("N", Range(0,1000)) = 250
     }
     SubShader
     {
@@ -13,75 +15,109 @@ Shader "Custom/Stars"
         Cull back
         LOD 100
 
-        Pass
+        CGPROGRAM
+        // Physically based Standard lighting model, and enable shadows on all light types
+        #pragma surface surf Lambert vertex:vert alpha:blend
+        #pragma vertex vert alpha
+        //#pragma fragment frag alpha
+
+        // Use shader model 3.0 target, to get nicer looking lighting
+        #pragma target 3.0
+
+        sampler2D _MainTex;
+        float4 _MainTex_ST;
+        float4 _Color;
+        
+        half _Glossiness;
+        half _Metallic;
+        
+        half _N;
+
+        struct Input
         {
-            CGPROGRAM
-            #pragma vertex vert alpha
-            #pragma fragment frag
-            // make fog work
-            #pragma multi_compile_fog
+            float3 worldNormal;
+            float3 worldPos;
+        };
 
-            #include "UnityCG.cginc"
+        // Add instancing support for this shader. You need to check 'Enable Instancing' on materials that use the shader.
+        // See https://docs.unity3d.com/Manual/GPUInstancing.html for more information about instancing.
+        // #pragma instancing_options assumeuniformscaling
+        UNITY_INSTANCING_BUFFER_START(Props)
+            // put more per-instance properties here
+        UNITY_INSTANCING_BUFFER_END(Props)
 
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                UNITY_FOG_COORDS(1)
-                float4 vertex : SV_POSITION;
-            };
-
-            sampler2D _MainTex;
-            float4 _MainTex_ST;
-
-            float4 _Color;
-
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-                UNITY_TRANSFER_FOG(o,o.vertex);
-                return o;
-            }
-
-            fixed4 frag(v2f i) : SV_Target
-            {
-                // sample the texture
-                fixed4 col = _Color;
-
-                fixed3 norm = fixed3(i.vertex.x, i.vertex.y, i.vertex.z);
-                float mag = sqrt(norm.x * norm.x + norm.y * norm.y + norm.z * norm.z);
-
-                norm /= mag;
-
-                if (abs(norm.y) > 0.5)
-                {
-                    col = tex2D(_MainTex, i.vertex.xz * _MainTex_ST.xy) * _Color;
-                }
-                else if (abs(norm.x) > 0.5)
-                {
-                    col = tex2D(_MainTex, i.vertex.zy * _MainTex_ST.xy) * _Color;
-                }
-                else
-                {
-                    col = tex2D(_MainTex, i.vertex.xy * _MainTex_ST.xy) * _Color;
-                }
-
-                col = tex2D(_MainTex, i.uv) * _Color;
-
-                //col.a += 0.5f;
-
-                // apply fog
-                UNITY_APPLY_FOG(i.fogCoord, col);
-                return col;
-            }
-            ENDCG
+        void vert(inout appdata_full v, out Input o)
+        {
+            UNITY_INITIALIZE_OUTPUT(Input, o);
         }
+
+        fixed3 goldenSpiral(float i)
+        {
+            fixed3 p = fixed3(0, 0, 0);
+
+            float gr = 1.61803398875f;
+            float pi = 3.14159265359f;
+
+            float theta = (2 * pi * i) / gr;
+            float phi = acos(1.0f - ((2 * i) / _N));
+
+            p.x = cos(theta) * sin(phi);
+            p.y = sin(theta) * sin(phi);
+            p.z = cos(phi);
+
+            return p;
+        }
+
+        float distance(fixed3 a, fixed3 b)
+        {
+            fixed3 r = fixed3(b.x - a.x, b.y - a.y, b.z - a.z);
+            float mag = sqrt(r.x * r.x + r.y * r.y + r.z * r.z);
+            return mag;
+        }
+
+        float distance(fixed3 v)
+        {
+            float mag = sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+            return mag;
+        }
+
+        void surf(Input IN, inout SurfaceOutput o)
+        {
+            fixed4 c = fixed4(0, 0, 0, 0);
+            fixed4 c2 = fixed4(1, 1, 1, 1);
+
+            fixed3 n = fixed3(IN.worldPos.x, IN.worldPos.y, IN.worldPos.z);
+            float m = distance(n);
+            fixed3 nn = fixed3(n.x / m, n.y / m, n.z / m);
+
+            float z = IN.worldNormal.z;
+            float ip = _N * (-z + 1.0f) * 0.5f;
+
+            float ifv = floor(ip);
+            float icv = ceil(ip);
+
+            fixed3 gsf = goldenSpiral(ifv);
+            fixed3 gcf = goldenSpiral(icv);
+
+            float df = distance(gsf, nn);
+            float dc = distance(gcf, nn);
+
+            float dist = min(df, dc);
+
+            float lf = 0.0f;
+
+            if (dist < 0.9f)
+            {
+                lf = 1.0f;
+            }
+
+            fixed4 l = lerp(c, c2, lf);
+
+            // Albedo comes from a texture tinted by color
+            o.Albedo = l.rgb;
+            o.Alpha = l.a;
+        }
+        ENDCG
     }
+    FallBack "Diffuse"
 }

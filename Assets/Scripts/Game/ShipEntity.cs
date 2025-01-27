@@ -7,7 +7,7 @@ public class ShipEntity : TransformEntity
     public static Vector3 BLACKHOLE_POSITION = new Vector3(-100f, -9.5f, -250f);
     public static float BLACKHOLE_MAX_DIST = 12.5f;
     public static float BLACKHOLE_MIN_DIST = 150.0f;
-    public static float BLACKHOLE_STRENGTH_MAX = 0.9f;
+    public static float BLACKHOLE_STRENGTH_MAX = 9.0f;
     public static float BLACKHOLE_STRENGTH_MIN = 0.0f;
 
     public Vector3 startingPosition;
@@ -125,11 +125,25 @@ public class ShipEntity : TransformEntity
 
             float power = Mathf.Lerp(BLACKHOLE_STRENGTH_MAX, BLACKHOLE_STRENGTH_MIN, lerp) * ACCELERATION;
 
-            body.linearVelocity += (blackholeRelative / blackholeDist) * power * Time.fixedDeltaTime;
+            Vector3 forward = Vector3.forward;
+
+            if (controller != null)
+            {
+                forward = transform.rotation * Vector3.forward;
+            }
+
+            float dot = Vector3.Dot(forward, blackholeRelative);
+            float multiplier = 1.0f;
+
+            if (dot < 0.0f)
+            {
+                multiplier = 0.1f;
+            }
+
+            body.linearVelocity += (blackholeRelative / blackholeDist) * power * multiplier * Time.fixedDeltaTime;
 
             isBeingPulled = true;
         }
-
 
         if (controller != null)
         {
@@ -235,30 +249,30 @@ public class ShipEntity : TransformEntity
                 body.linearVelocity += acceleration * Time.fixedDeltaTime;
             }
 
-            if (!isBeingPulled)
+            if (inputVector == Vector2.zero)
             {
-                if (inputVector == Vector2.zero)
+                if (!isBeingPulled)
                 {
                     float frictionScalar = Mathf.Pow(FRICTION, Time.fixedDeltaTime);
                     body.linearVelocity *= frictionScalar;
                 }
-                else
-                {
-                    float sideFrictionScalar = Mathf.Pow(SIDE_FRICTION, Time.fixedDeltaTime);
+            }
+            else
+            {
+                float sideFrictionScalar = Mathf.Pow(SIDE_FRICTION, Time.fixedDeltaTime);
 
-                    Vector3 forward = acceleration.normalized;
-                    Vector3 normal = Vector3.Cross(forward, Vector3.up);
-                    Vector3 biNormal = Vector3.Cross(normal, forward);
+                Vector3 forward = acceleration.normalized;
+                Vector3 normal = Vector3.Cross(forward, Vector3.up);
+                Vector3 biNormal = Vector3.Cross(normal, forward);
 
-                    float f = Vector3.Dot(body.linearVelocity, forward);
-                    float n = Vector3.Dot(body.linearVelocity, normal);
-                    float bn = Vector3.Dot(body.linearVelocity, biNormal);
+                float f = Vector3.Dot(body.linearVelocity, forward);
+                float n = Vector3.Dot(body.linearVelocity, normal);
+                float bn = Vector3.Dot(body.linearVelocity, biNormal);
 
-                    n *= sideFrictionScalar;
-                    bn *= sideFrictionScalar;
+                n *= sideFrictionScalar;
+                bn *= sideFrictionScalar;
 
-                    body.linearVelocity = forward * f + normal * n + biNormal * bn;
-                }
+                body.linearVelocity = forward * f + normal * n + biNormal * bn;
             }
         }
         else
