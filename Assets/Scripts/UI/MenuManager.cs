@@ -64,6 +64,10 @@ public class MenuManager : MonoBehaviour
     public Text usernameText;
     public TouchScreenKeyboard mobileKeyboard;
 
+    //audio variables
+    public AudioSource soundSource;
+    public Slider volumeSlider;
+
     void Start()
     {
         Initialise();   
@@ -273,6 +277,11 @@ public class MenuManager : MonoBehaviour
         {
             mobileKeyboard = TouchScreenKeyboard.Open("", TouchScreenKeyboardType.ASCIICapable, false, false, false);
         }
+    }
+
+    public void VolumeSliderChanged()
+    {
+        soundSource.volume = volumeSlider.normalizedValue;
     }
 
     public void UpdateCrosshair()

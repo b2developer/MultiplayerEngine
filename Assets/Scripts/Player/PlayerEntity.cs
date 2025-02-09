@@ -599,7 +599,7 @@ public class PlayerEntity : TransformEntity
                     q = Quaternion.FromToRotation(UP, currentPlane) * frame;
                     qi = Quaternion.Inverse(q);
 
-                    groundBody = exactInfo.collider.GetComponent<Rigidbody>();
+                    //groundBody = exactInfo.collider.GetComponent<Rigidbody>();
 
                     //readjust the velocity to slide down the plane instead of bounce off it
                     if (!wasGrounded)

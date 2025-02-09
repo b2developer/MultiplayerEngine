@@ -396,6 +396,8 @@ public class ColliderCache
     public float[] capsuleRadiuses;
     public float[] capsuleHeights;
 
+    public float boundingRadius = 0.0f;
+
     public ColliderCache()
     {
 
@@ -409,6 +411,8 @@ public class ColliderCache
 
         isEmpty = spheres.Length == 0 && boxes.Length == 0 && capsules.Length == 0;
 
+        float maxDistance = 0.0f;
+
         sphereCentres = new Vector3[spheres.Length];
         sphereRadiuses = new float[spheres.Length];
 
@@ -416,6 +420,13 @@ public class ColliderCache
         {
             sphereCentres[i] = spheres[i].center;
             sphereRadiuses[i] = spheres[i].radius;
+
+            float sphereDistance = sphereCentres[i].magnitude + sphereRadiuses[i];
+
+            if (sphereDistance > maxDistance)
+            {
+                maxDistance = sphereDistance;
+            }
         }
 
         boxCentres = new Vector3[boxes.Length];
@@ -425,6 +436,13 @@ public class ColliderCache
         {
             boxCentres[i] = boxes[i].center;
             boxSizes[i] = boxes[i].size;
+
+            float boxDistance = boxCentres[i].magnitude + Mathf.Max(Mathf.Max(boxSizes[i].x, boxSizes[i].y), boxSizes[i].z);
+
+            if (boxDistance > maxDistance)
+            {
+                maxDistance = boxDistance;
+            }
         }
 
         capsuleCentres = new Vector3[capsules.Length];
@@ -436,6 +454,15 @@ public class ColliderCache
             capsuleCentres[i] = capsules[i].center;
             capsuleRadiuses[i] = capsules[i].radius;
             capsuleHeights[i] = capsules[i].height;
+
+            float capsuleDistance = capsuleCentres[i].magnitude + capsuleRadiuses[i] + capsuleHeights[i];
+
+            if (capsuleDistance > maxDistance)
+            {
+                maxDistance = capsuleDistance;
+            }
         }
+
+        boundingRadius = maxDistance;
     }
 }

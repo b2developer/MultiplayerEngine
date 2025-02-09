@@ -109,7 +109,7 @@ public class ShipClientEntity : TransformEntity
         }
     }
 
-    public void Update()
+    public new void Update()
     {
         if (interpolationFilter != null)
         {

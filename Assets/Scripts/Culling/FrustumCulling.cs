@@ -63,6 +63,24 @@ public class FrustumCulling : Culling
                 Plane plane = planes[j];
                 bool success = false;
 
+                Vector3 centre = transformCache.TransformPoint(Vector3.zero);
+                float radius = transformCache.scale.x * cache.boundingRadius;
+
+                Debug.DrawLine(centre, centre + Vector3.up * radius, Color.red);
+                Debug.DrawLine(centre, centre + Vector3.down * radius, Color.red);
+                Debug.DrawLine(centre, centre + Vector3.left * radius, Color.red);
+                Debug.DrawLine(centre, centre + Vector3.right * radius, Color.red);
+                Debug.DrawLine(centre, centre + Vector3.forward * radius, Color.red);
+                Debug.DrawLine(centre, centre + Vector3.back * radius, Color.red);
+
+                if (MathExtension.SphereInsidePlane(plane, centre, radius))
+                {
+                    success = true;
+                    successCount++;
+                    continue;
+                }
+
+                /*
                 for (int k = 0; k < cache.spheres.Length; k++)
                 {
                     Vector3 centre = transformCache.TransformPoint(cache.sphereCentres[k]);
@@ -109,6 +127,7 @@ public class FrustumCulling : Culling
                         }
                     }
                 }
+                */
 
                 if (!success)
                 {
